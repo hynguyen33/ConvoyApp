@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">ConvoyApp</string>
+    <string name="please_complete_the_form">Please Complete the Form</string>
+    <string name="Submit">Submit</string>
+    <string name="userName">Enter your user name</string>
+    <string name="realName">Enter your name</string>
+    <string name="userPassword">Enter your password</string>
+    <string name="userConfirmPassword">Confirm your password</string>
+    <string name = "please_sign_in">Please Sign In</string>
+
+
 </resources>
