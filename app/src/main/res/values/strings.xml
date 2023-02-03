@@ -3,10 +3,13 @@
     <string name="please_complete_the_form">Please Complete the Form</string>
     <string name="Submit">Submit</string>
     <string name="userName">Enter your user name</string>
-    <string name="realName">Enter your name</string>
+    <string name="lastName">Enter your last name</string>
+    <string name="firstName">Enter your first name</string>
     <string name="userPassword">Enter your password</string>
     <string name="userConfirmPassword">Confirm your password</string>
-    <string name = "please_sign_in">Please Sign In</string>
+    <string name="please_sign_in"> Welcome to Convoy App. Please Sign In</string>
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
 
 
 </resources>
