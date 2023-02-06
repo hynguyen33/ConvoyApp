@@ -10,6 +10,8 @@ import android.location.LocationManager
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.animation.Animation
+import android.view.animation.AnimationUtils
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.android.volley.Response
@@ -22,6 +24,7 @@ import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.Marker
 import com.google.android.gms.maps.model.MarkerOptions
+import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONObject
 import java.nio.charset.Charset
@@ -30,17 +33,25 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationManager: LocationManager
     private lateinit var locationListener: LocationListener
 
+    private val rotateOpen: Animation by lazy { AnimationUtils.loadAnimation(this,R.anim.rotate_open_anim) }
+    private val rotateClose: Animation by lazy { AnimationUtils.loadAnimation(this,R.anim.rotate_end_anim) }
+    private val fromBottom: Animation by lazy { AnimationUtils.loadAnimation(this,R.anim.from_bottom_anim) }
+    private val toBottom: Animation by lazy { AnimationUtils.loadAnimation(this,R.anim.to_bottom_anim) }
+    private var clicked = false
     private lateinit var mapView: MapView
     private var marker: Marker? = null
     var map: GoogleMap? = null
-    private lateinit var startButton: FloatingActionButton
-    private lateinit var joinButton: FloatingActionButton
-    private lateinit var leaveButton: FloatingActionButton
+
+    private lateinit var startButton: ExtendedFloatingActionButton
+    private lateinit var joinButton: ExtendedFloatingActionButton
+    private lateinit var leaveButton: ExtendedFloatingActionButton
+    private lateinit var extendButton:FloatingActionButton
     private lateinit var preferences: SharedPreferences
-    private lateinit var dialog: Dialog
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.mapping)
+
         mapView = findViewById(R.id.mapView)
         mapView.onCreate(savedInstanceState)
         mapView.getMapAsync(this)
@@ -49,6 +60,7 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
         startButton = findViewById(R.id.startButton)
         joinButton = findViewById(R.id.joinButton)
         leaveButton = findViewById(R.id.leaveButton)
+        extendButton = findViewById(R.id.extendButton)
 
         val currentUser = preferences.getString(Const.USERNAME,"not exist")
         val currentSession = preferences.getString(Const.SESSION_KEY,"not exist")
@@ -82,6 +94,9 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
         }
+        extendButton.setOnClickListener {
+            onExtendButtonClicked()
+        }
         startButton.setOnClickListener{
             val convoyPost = Const.ACTION+"="+ Const.CREATE +"&"+
                     Const.USERNAME +"="+currentUser+"&"+
@@ -99,13 +114,18 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                     Method.POST, Const.CONVOY_API,
                     Response.Listener { response ->
                         // response
-                        var strResp = JSONObject(response)
+                        val strResp = JSONObject(response)
                         Log.d("API", strResp.toString())
 
                         if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
                             val currentConvoyId = preferences.edit()
                             currentConvoyId.putString(Const.CONVOYID, strResp.getString(Const.CONVOYID))
                             currentConvoyId.apply()
+                            if(savedInstanceState == null) { // initial transaction should be wrapped like this
+                                supportFragmentManager.beginTransaction()
+                                    .replace(R.id.fragmentContainerView, MessageFragment.newInstance("Convoy Key",preferences.getString(Const.CONVOYID,"not exist").toString()))
+                                    .commitAllowingStateLoss()
+                            }
                         }
                         else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
                             Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
@@ -123,6 +143,7 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                     }
                 }
             queue.add(stringReq)
+
         }
         leaveButton.setOnClickListener {
             val convoyPost = Const.ACTION+"="+ Const.END +"&"+
@@ -135,7 +156,7 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                     Method.POST, Const.CONVOY_API,
                     Response.Listener { response ->
                         // response
-                        var strResp = JSONObject(response)
+                        val strResp = JSONObject(response)
                         Log.d("API", strResp.toString())
 
                         if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
@@ -170,7 +191,7 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                     Method.POST, Const.CONVOY_API,
                     Response.Listener { response ->
                         // response
-                        var strResp = JSONObject(response)
+                        val strResp = JSONObject(response)
                         Log.d("API", strResp.toString())
 
                         if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
@@ -208,12 +229,6 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                 locationListener
             )
         }
-    }
-    private fun placeMarkerOnMap(location: LatLng) {
-        val markerOptions = MarkerOptions()
-            .position(location)
-            .title("My Location")
-        marker = map?.addMarker(markerOptions)
     }
     override fun onStart() {
         super.onStart()
@@ -254,6 +269,51 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
     override fun onMapReady(googleMap: GoogleMap) {
         map = googleMap
     }
+    private fun onExtendButtonClicked(){
+        setVisibility(clicked)
+        setAnimation(clicked)
+        setClickable(clicked)
+        clicked = !clicked
+    }
+    private fun setAnimation(clicked: Boolean){
+        if(!clicked){
+            startButton.visibility =  View.VISIBLE
+            joinButton.visibility = View.VISIBLE
+            leaveButton.visibility = View.VISIBLE
+        }
+        else{
+            startButton.visibility =  View.INVISIBLE
+            joinButton.visibility = View.INVISIBLE
+            leaveButton.visibility = View.INVISIBLE
+        }
+    }
+    private fun setVisibility(clicked: Boolean){
+        if(!clicked){
+            startButton.startAnimation(fromBottom)
+            joinButton.startAnimation(fromBottom)
+            leaveButton.startAnimation(fromBottom)
+            extendButton.startAnimation(rotateOpen)
+        }
+        else{
+            startButton.startAnimation(toBottom)
+            joinButton.startAnimation(toBottom)
+            leaveButton.startAnimation(toBottom)
+            extendButton.startAnimation(rotateClose)
+        }
+    }
+    private fun setClickable(clicked: Boolean){
+        if(!clicked){
+            startButton.isClickable = true
+            joinButton.isClickable = true
+            leaveButton.isClickable = true
+        }
+        else{
+            startButton.isClickable = false
+            joinButton.isClickable = false
+            leaveButton.isClickable = false
+        }
+    }
+
 }
 
 
