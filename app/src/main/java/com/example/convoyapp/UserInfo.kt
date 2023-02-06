@@ -7,6 +7,13 @@ object Const{
     const val USERNAME = "username"
     const val PASSWORD = "password"
     const val ACTION = "action"
+
+    const val QUERY = "QUERY"
+    const val CREATE = "CREATE"
+    const val END = "END"
+    const val CONVOYID = "convoy_id"
+
+
     const val SESSION_KEY = "session_key"
     const val REGISTER = "REGISTER"
     const val LOGIN = "LOGIN"
@@ -15,6 +22,7 @@ object Const{
     const val SUCCESS = "SUCCESS"
     const val ERROR = "ERROR"
     const val ACCOUNT = "https://kamorris.com/lab/convoy/account.php"
+    const val CONVOY_API = "https://kamorris.com/lab/convoy/convoy.php"
 }
 data class UserInfo (val username: String,val firstname: String,val lastname: String){
 

@@ -1,6 +1,9 @@
 package com.example.convoyapp
 
 import android.content.Intent
+import android.content.SharedPreferences
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
@@ -15,14 +18,17 @@ import org.json.JSONObject
 import java.nio.charset.Charset
 
 class MainActivity : AppCompatActivity() {
-    private val controlURL = "https://kamorris.com/lab/convoy/convoy.php"
+
     private lateinit var signInButton: Button
     private lateinit var signUpButton: Button
     private lateinit var userName: EditText
     private lateinit var password: EditText
+    private lateinit var preferences: SharedPreferences
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        preferences = getSharedPreferences("currentData",MODE_PRIVATE)
+
         signInButton = findViewById(R.id.signInButton)
         signUpButton = findViewById(R.id.signUpButton)
         userName = findViewById(R.id.signInUserName)
@@ -32,7 +38,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
         signInButton.setOnClickListener{
-            val signPost = Const.ACTION+"="+ Const.LOGIN +"&"+ Const.USERNAME +"="+userName.toString()+"&"+Const.PASSWORD +"="+ password.toString()
+
+            val signPost = Const.ACTION+"="+ Const.LOGIN +"&"+
+                    Const.USERNAME +"="+userName.text.toString()+"&"+
+                    Const.PASSWORD +"="+ password.text.toString()
+
+            Log.d("SignInPost",signPost)
             val queue = Volley.newRequestQueue(this)
             val stringReq : StringRequest =
                 object : StringRequest(
@@ -41,11 +52,21 @@ class MainActivity : AppCompatActivity() {
                         // response
                         var strResp = JSONObject(response)
                         Log.d("API", strResp.toString())
+
                         if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
                             Log.d("Status",Const.STATUS)
-                            Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
-//                            val intent = Intent(this@Register,MainActivity::class.java)
-//                            startActivity(intent)
+                            val currentUserName = preferences.edit()
+                            currentUserName.putString(Const.USERNAME,userName.text.toString())
+                            currentUserName.apply()
+                            val currentSessionKey = preferences.edit()
+                            currentSessionKey.putString(Const.SESSION_KEY, strResp.getString(Const.SESSION_KEY))
+                            currentSessionKey.apply()
+                            Log.d("CurrentUser",preferences.getString(Const.USERNAME,"DEFAULT") + preferences.getString(Const.SESSION_KEY,"DEFAULT"))
+                            val user = preferences.getString(Const.USERNAME,"DEFAULT")
+                            val ses = preferences.getString(Const.SESSION_KEY,"DEFAULT")
+                            Toast.makeText(this, user + ses , Toast.LENGTH_SHORT).show()
+                            val intent = Intent(this@MainActivity,Map::class.java)
+                            startActivity(intent)
 
                         }else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
                             Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
@@ -57,7 +78,6 @@ class MainActivity : AppCompatActivity() {
                         Log.d("API", "error => $error")
                     }
                 )
-
                 {
                     override fun getBody(): ByteArray {
                         return signPost.toByteArray(Charset.defaultCharset())

@@ -40,9 +40,9 @@ class Register: AppCompatActivity() {
 //            if(signUpPassword.toString() == signUpConfirmPassword.toString()){
 //
 //            }
-            val postInfo = Const.ACTION+"="+ Const.REGISTER +"&"+ Const.USERNAME +"="+signUpUserName.toString()+"&"+
-                    Const.FIRSTNAME+"="+ signUpFistName.toString()+"&" + Const.LASTNAME +"="+ signUpLastName.toString()+"&"+
-                    Const.PASSWORD +"="+ signUpPassword.toString()
+            val postInfo = Const.ACTION+"="+ Const.REGISTER +"&"+ Const.USERNAME +"="+signUpUserName.text.toString()+"&"+
+                    Const.FIRSTNAME+"="+ signUpFistName.text.toString()+"&" + Const.LASTNAME +"="+ signUpLastName.text.toString()+"&"+
+                    Const.PASSWORD +"="+ signUpPassword.text.toString()
             Log.d("PostInfo", postInfo)
             Log.d("Json",getSignUpInfo().toString())
             val queue = Volley.newRequestQueue(this)
