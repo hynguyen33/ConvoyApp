@@ -2,17 +2,20 @@ package com.example.convoyapp
 
 import android.Manifest
 import android.app.Dialog
-import android.content.SharedPreferences
+import android.content.*
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.util.Log
 import android.view.View
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import com.android.volley.Response
 import com.android.volley.toolbox.StringRequest
@@ -28,6 +31,7 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import org.json.JSONObject
 import java.nio.charset.Charset
+
 
 class Map: AppCompatActivity(), OnMapReadyCallback {
     private lateinit var locationManager: LocationManager
@@ -45,12 +49,20 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
     private lateinit var startButton: ExtendedFloatingActionButton
     private lateinit var joinButton: ExtendedFloatingActionButton
     private lateinit var leaveButton: ExtendedFloatingActionButton
+    private lateinit var endButton: ExtendedFloatingActionButton
     private lateinit var extendButton:FloatingActionButton
-    private lateinit var preferences: SharedPreferences
+    private lateinit var logOutButton: FloatingActionButton
 
+    private var mapLocationServices: MapLocationServices? = null
+    private lateinit var preferences: SharedPreferences
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.mapping)
+        if(savedInstanceState == null) { // initial transaction should be wrapped like this
+            supportFragmentManager.beginTransaction()
+                .replace(R.id.fragmentContainerView, MessageFragment.newInstance("",""))
+                .commit()
+        }
 
         mapView = findViewById(R.id.mapView)
         mapView.onCreate(savedInstanceState)
@@ -61,6 +73,8 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
         joinButton = findViewById(R.id.joinButton)
         leaveButton = findViewById(R.id.leaveButton)
         extendButton = findViewById(R.id.extendButton)
+        logOutButton = findViewById(R.id.logOutButton)
+        endButton = findViewById(R.id.endButton)
 
         val currentUser = preferences.getString(Const.USERNAME,"not exist")
         val currentSession = preferences.getString(Const.SESSION_KEY,"not exist")
@@ -97,53 +111,22 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
         extendButton.setOnClickListener {
             onExtendButtonClicked()
         }
+        logOutButton.setOnClickListener {
+            endConvoy(currentUser.toString(),currentSession.toString())
+//            if(queryConvoy(currentUser.toString(),currentSession.toString())){
+//
+//            }
+            Handler().postDelayed(Runnable {
+                val intent = Intent(this@Map,MainActivity::class.java)
+                startActivity(intent)
+            }, 1000)
+
+        }
         startButton.setOnClickListener{
-            val convoyPost = Const.ACTION+"="+ Const.CREATE +"&"+
-                    Const.USERNAME +"="+currentUser+"&"+
-                    Const.SESSION_KEY +"="+ currentSession
-            Log.d("convoyPost", convoyPost)
-
-            val dialogBinding = layoutInflater.inflate(R.layout.custom_dialog, null)
-            val myDialog = Dialog(this)
-            myDialog.setContentView(dialogBinding)
-            myDialog.show()
-
-            val queue = Volley.newRequestQueue(this)
-            val stringReq : StringRequest =
-                object : StringRequest(
-                    Method.POST, Const.CONVOY_API,
-                    Response.Listener { response ->
-                        // response
-                        val strResp = JSONObject(response)
-                        Log.d("API", strResp.toString())
-
-                        if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
-                            val currentConvoyId = preferences.edit()
-                            currentConvoyId.putString(Const.CONVOYID, strResp.getString(Const.CONVOYID))
-                            currentConvoyId.apply()
-                            if(savedInstanceState == null) { // initial transaction should be wrapped like this
-                                supportFragmentManager.beginTransaction()
-                                    .replace(R.id.fragmentContainerView, MessageFragment.newInstance("Convoy Key",preferences.getString(Const.CONVOYID,"not exist").toString()))
-                                    .commitAllowingStateLoss()
-                            }
-                        }
-                        else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
-                            Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
-                            Log.d("Error",strResp.getString("message"))
-                        }
-
-                    },
-                    Response.ErrorListener { error ->
-                        Log.d("API", "error => $error")
-                    }
-                )
-                {
-                    override fun getBody(): ByteArray {
-                        return convoyPost.toByteArray(Charset.defaultCharset())
-                    }
-                }
-            queue.add(stringReq)
-
+            startConvoy(currentUser.toString(),currentSession.toString())
+        }
+        endButton.setOnClickListener {
+            endConvoy(currentUser.toString(),currentSession.toString())
         }
         leaveButton.setOnClickListener {
             val convoyPost = Const.ACTION+"="+ Const.END +"&"+
@@ -160,8 +143,16 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
                         Log.d("API", strResp.toString())
 
                         if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
-                            Toast.makeText(this,"End Convoy",Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this,"Leave Convoy",Toast.LENGTH_SHORT).show()
+                            if(savedInstanceState == null) { // initial transaction should be wrapped like this
+                                supportFragmentManager.beginTransaction()
+                                    .replace(R.id.fragmentContainerView, MessageFragment.newInstance("",""))
+                                    .commit()
+                            }
+                            var intent = Intent(this,MapLocationServices::class.java)
+                            stopService(intent)
                         }
+
                         else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
                             Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
                             Log.d("Error",strResp.getString("message"))
@@ -181,54 +172,152 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
         }
 
         joinButton.setOnClickListener {
-            val convoyPost = Const.ACTION+"="+ Const.QUERY +"&"+
-                    Const.USERNAME +"="+currentUser+"&"+
-                    Const.SESSION_KEY +"="+ currentSession
-            Log.d("convoyPost", convoyPost)
-            val queue = Volley.newRequestQueue(this)
-            val stringReq : StringRequest =
-                object : StringRequest(
-                    Method.POST, Const.CONVOY_API,
-                    Response.Listener { response ->
-                        // response
-                        val strResp = JSONObject(response)
-                        Log.d("API", strResp.toString())
+            Toast.makeText(this, "Joined Convoy", Toast.LENGTH_SHORT).show()
+        }
 
-                        if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
-                            val currentConvoyId = preferences.edit()
-                            currentConvoyId.putString(Const.CONVOYID, strResp.getString(Const.CONVOYID))
-                            currentConvoyId.apply()
-                            Log.d("convoyId", preferences.getString(Const.CONVOYID,"not exist").toString())
-                        }
-                        else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
-                            Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
-                            Log.d("Error",strResp.getString("message"))
-                        }
 
-                    },
-                    Response.ErrorListener { error ->
-                        Log.d("API", "error => $error")
+    }
+    private fun checkUserLocation(){
+        if (checkCallingOrSelfPermission(
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) locationManager.requestLocationUpdates(
+            LocationManager.GPS_PROVIDER,
+            1000, 10f,
+            locationListener
+        )
+    }
+    private fun queryConvoy(currentUser: String,currentSession: String): Boolean {
+        var isActive = false
+        val convoyPost = Const.ACTION + "=" + Const.QUERY + "&" +
+                Const.USERNAME + "=" + currentUser + "&" +
+                Const.SESSION_KEY + "=" + currentSession
+        Log.d("convoyPost", convoyPost)
+        val queue = Volley.newRequestQueue(this)
+        val stringReq: StringRequest =
+            object : StringRequest(
+                Method.POST, Const.CONVOY_API,
+                Response.Listener { response ->
+                    // response
+                    val strResp = JSONObject(response)
+                    Log.d("API", strResp.toString())
+
+                    if (strResp.getString(Const.STATUS).equals(Const.SUCCESS)) {
+                        Toast.makeText(this, " Join Convoy", Toast.LENGTH_SHORT).show()
+                        val currentConvoyId = preferences.edit()
+                        currentConvoyId.putString(Const.CONVOYID, strResp.getString(Const.CONVOYID))
+                        currentConvoyId.apply()
+                        isActive = strResp.getBoolean("convoy_active")
+                        Log.d(
+                            "convoyId",
+                            preferences.getString(Const.CONVOYID, "not exist").toString()
+                        )
+                    } else if (strResp.getString(Const.STATUS).equals(Const.ERROR)) {
+                        Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT)
+                            .show()
+                        Log.d("Error", strResp.getString("message"))
                     }
-                )
-                {
-                    override fun getBody(): ByteArray {
-                        return convoyPost.toByteArray(Charset.defaultCharset())
-                    }
+
+                },
+                Response.ErrorListener { error ->
+                    Log.d("API", "error => $error")
                 }
-            queue.add(stringReq)
-        }
+            ) {
+                override fun getBody(): ByteArray {
+                    return convoyPost.toByteArray(Charset.defaultCharset())
+                }
+            }
+        queue.add(stringReq)
+        return isActive
+    }
 
-        findViewById<View>(R.id.updateButton).setOnClickListener {
+    private fun startConvoy(currentUser: String,currentSession: String){
+        val convoyPost = Const.ACTION+"="+ Const.CREATE +"&"+
+                Const.USERNAME +"="+currentUser+"&"+
+                Const.SESSION_KEY +"="+ currentSession
+        Log.d("convoyPost", convoyPost)
 
-            if (checkCallingOrSelfPermission(
-                    Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-            ) locationManager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER,
-                0, 1f,
-                locationListener
+        val dialogBinding = layoutInflater.inflate(R.layout.custom_dialog, null)
+        val myDialog = Dialog(this)
+        myDialog.setContentView(dialogBinding)
+        myDialog.show()
+
+        val queue = Volley.newRequestQueue(this)
+        val stringReq : StringRequest =
+            @RequiresApi(Build.VERSION_CODES.O)
+            object : StringRequest(
+                Method.POST, Const.CONVOY_API,
+                Response.Listener { response ->
+                    // response
+                    val strResp = JSONObject(response)
+                    Log.d("API", strResp.toString())
+
+                    if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
+                        val currentConvoyId = preferences.edit()
+                        currentConvoyId.putString(Const.CONVOYID, strResp.getString(Const.CONVOYID))
+                        currentConvoyId.apply()
+                        supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainerView, MessageFragment.newInstance("Convoy Key",preferences.getString(Const.CONVOYID,"not exist").toString()))
+                            .commit()
+                        val serviceIntent = Intent(this, MapLocationServices::class.java)
+                        startForegroundService(serviceIntent)
+//                            onStartButtonClicked()
+                    }
+                    else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
+                        Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
+                        Log.d("Error",strResp.getString("message"))
+                    }
+
+                },
+                Response.ErrorListener { error ->
+                    Log.d("API", "error => $error")
+                }
             )
-        }
+            {
+                override fun getBody(): ByteArray {
+                    return convoyPost.toByteArray(Charset.defaultCharset())
+                }
+            }
+        queue.add(stringReq)
+    }
+    private fun endConvoy(currentUser: String, currentSession:String){
+        val convoyPost = Const.ACTION+"="+ Const.END +"&"+
+                Const.USERNAME +"="+currentUser+"&"+
+                Const.SESSION_KEY +"="+ currentSession +"&"+
+                Const.CONVOYID +"="+preferences.getString(Const.CONVOYID,"not exist")
+        val queue = Volley.newRequestQueue(this)
+        val stringReq : StringRequest =
+            object : StringRequest(
+                Method.POST, Const.CONVOY_API,
+                Response.Listener { response ->
+                    // response
+                    val strResp = JSONObject(response)
+                    Log.d("API", strResp.toString())
+
+                    if(strResp.getString(Const.STATUS).equals(Const.SUCCESS)){
+                        supportFragmentManager.beginTransaction()
+                            .replace(R.id.fragmentContainerView, MessageFragment.newInstance("",""))
+                            .commit()
+
+                        var intent = Intent(this,MapLocationServices::class.java)
+                        stopService(intent)
+                    }
+                    else if(strResp.getString(Const.STATUS).equals(Const.ERROR)){
+                        Toast.makeText(this, strResp.getString("message"), Toast.LENGTH_SHORT).show()
+                        Log.d("Error",strResp.getString("message"))
+                    }
+
+                },
+                Response.ErrorListener { error ->
+                    Log.d("API", "error => $error")
+                }
+            )
+            {
+                override fun getBody(): ByteArray {
+                    return convoyPost.toByteArray(Charset.defaultCharset())
+                }
+            }
+        queue.add(stringReq)
     }
     override fun onStart() {
         super.onStart()
@@ -237,6 +326,7 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
 
     override fun onResume() {
         super.onResume()
+        checkUserLocation()
         mapView.onResume()
     }
 
@@ -275,16 +365,19 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
         setClickable(clicked)
         clicked = !clicked
     }
+
     private fun setAnimation(clicked: Boolean){
         if(!clicked){
             startButton.visibility =  View.VISIBLE
             joinButton.visibility = View.VISIBLE
             leaveButton.visibility = View.VISIBLE
+            endButton.visibility = View.VISIBLE
         }
         else{
             startButton.visibility =  View.INVISIBLE
             joinButton.visibility = View.INVISIBLE
             leaveButton.visibility = View.INVISIBLE
+            endButton.visibility = View.INVISIBLE
         }
     }
     private fun setVisibility(clicked: Boolean){
@@ -292,12 +385,14 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
             startButton.startAnimation(fromBottom)
             joinButton.startAnimation(fromBottom)
             leaveButton.startAnimation(fromBottom)
+            endButton.startAnimation(fromBottom)
             extendButton.startAnimation(rotateOpen)
         }
         else{
             startButton.startAnimation(toBottom)
             joinButton.startAnimation(toBottom)
             leaveButton.startAnimation(toBottom)
+            endButton.startAnimation(toBottom)
             extendButton.startAnimation(rotateClose)
         }
     }
@@ -306,14 +401,39 @@ class Map: AppCompatActivity(), OnMapReadyCallback {
             startButton.isClickable = true
             joinButton.isClickable = true
             leaveButton.isClickable = true
+            endButton.isClickable = true
         }
         else{
             startButton.isClickable = false
             joinButton.isClickable = false
             leaveButton.isClickable = false
+            endButton.isClickable = false
         }
     }
-
+//    private fun setAnimationEndButton(clicked: Boolean){
+//        if(!clicked){
+//            endButton.visibility = View.VISIBLE
+//        }
+//        else{
+//            endButton.visibility = View.INVISIBLE
+//        }
+//    }
+//    private fun setVisibilityEndButton(clicked: Boolean){
+//        if(!clicked){
+//            endButton.startAnimation(fromBottom)
+//        }
+//        else{
+//            endButton.startAnimation(toBottom)
+//        }
+//    }
+//    private fun setClickableEndButton(clicked: Boolean){
+//        if(!clicked){
+//            endButton.isClickable = true
+//        }
+//        else{
+//            endButton.isClickable = false
+//        }
+//    }
 }
 
 
